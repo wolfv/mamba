@@ -25,6 +25,7 @@ from conda.cli.install import handle_txn, check_prefix, clone, print_activate
 from conda.base.constants import ChannelPriority, ROOT_ENV_NAME, UpdateModifier
 from conda.core.solve import diff_for_unlink_link_precs
 from conda.core.envs_manager import unregister_env
+from conda.history import History
 
 # create support
 from conda.common.path import paths_equal
@@ -129,14 +130,19 @@ def to_txn(specs, prefix, to_link, to_unlink, index=None):
             if str(x.channel) == c:
                 return x
 
-    for c, pkg in to_unlink:
+    if to_unlink is UpdateModifier.UPDATE_ALL:
         for i_rec in installed_pkg_recs:
-            if i_rec.fn == pkg:
-                final_precs.remove(i_rec)
-                to_unlink_records.append(i_rec)
-                break
-        else:
-            print("No package record found!")
+            final_precs.remove(i_rec)
+            to_unlink_records.append(i_rec)
+    else:
+        for c, pkg in to_unlink:
+            for i_rec in installed_pkg_recs:
+                if i_rec.fn == pkg:
+                    final_precs.remove(i_rec)
+                    to_unlink_records.append(i_rec)
+                    break
+            else:
+                print("No package record found!")
 
     for c, pkg, jsn_s in to_link:
         sdir = get_channel(c)
@@ -290,8 +296,6 @@ def install(args, parser, command='install'):
             else:
                 raise EnvironmentLocationNotFound(prefix)
 
-    # context.__init__(argparse_args=args)
-
     prepend = not args.override_channels
     prefix = context.target_prefix
 
@@ -364,12 +368,15 @@ def install(args, parser, command='install'):
         raise CondaValueError("too few arguments, "
                               "must supply command line package specs or --file")
 
+
     # for 'conda update', make sure the requested specs actually exist in the prefix
     # and that they are name-only specs
     if isupdate and context.update_modifier == UpdateModifier.UPDATE_ALL:
-        # Note: History(prefix).get_requested_specs_map()
-        print("Currently, mamba can only update explicit packages! (e.g. mamba update numpy python ...)")
-        exit()
+        history = History(prefix).get_requested_specs_map().values()
+        installed_json_f.truncate(0)
+        installed_json_f.write("{}")
+        specs = history
+        solver_task = api.SOLVER_INSTALL
 
     if isupdate and context.update_modifier != UpdateModifier.UPDATE_ALL:
         prefix_data = PrefixData(prefix)
@@ -410,7 +417,10 @@ def install(args, parser, command='install'):
                                    context.quiet,
                                    context.verbosity)
 
-    conda_transaction = to_txn(specs, prefix, to_link, to_unlink, index)
+    if isupdate and context.update_modifier == UpdateModifier.UPDATE_ALL:
+        conda_transaction = to_txn([], prefix, to_link, UpdateModifier.UPDATE_ALL, index)
+    else:
+        conda_transaction = to_txn(specs, prefix, to_link, to_unlink, index)
     handle_txn(conda_transaction, prefix, args, newenv)
 
     try:
@@ -466,8 +476,8 @@ def do_call(args, parser):
         exit_code = update(args, parser)
     else:
         print("Currently, only install, create, list, search, run, info and clean are supported through mamba.")
-
         return 0
+
     return exit_code
 
 def _wrapped_main(*args, **kwargs):
