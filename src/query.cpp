@@ -61,11 +61,28 @@ namespace mamba
         {
             out << "No entries matching \"" << query << "\" found";
         }
-        for (int i = 0; i < solvables.count; i++)
+
+        if (solvables.count > 0)
         {
-            Solvable* s = pool_id2solvable(m_pool.get(), solvables.elements[i]);
-            solvable_to_stream(out, s);
+            Solvable* s = pool_id2solvable(m_pool.get(), solvables.elements[0]);
+            std::cout << pool_id2str(m_pool.get(), s->name) << std::endl;
+            if (s->requires)
+            {
+                Id *reqp = s->repo->idarraydata + s->requires;
+                Id req = *reqp;
+                while (req != 0)            /* go through all requires */
+                {
+                    std::cout << "├─" << pool_id2str(m_pool.get(), req) << std::endl;
+                    ++reqp;
+                    req = *reqp;
+                }
+            }
         }
+        // for (int i = 0; i < solvables.count; i++)
+        // {
+        //     Solvable* s = pool_id2solvable(m_pool.get(), solvables.elements[i]);
+        //     solvable_to_stream(out, s);
+        // }
         out << std::endl;
 
         queue_free(&job);
