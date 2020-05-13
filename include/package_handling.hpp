@@ -16,7 +16,6 @@ namespace mamba
 {
     void extract_archive(const fs::path& file, const fs::path& destination);
     void extract_conda(const fs::path& file, const fs::path& dest_dir, const std::vector<std::string>& parts = {"info", "pkg"});
-    fs::path strip_package_name(const std::string& file);
     fs::path extract(const fs::path& file);
 }
 

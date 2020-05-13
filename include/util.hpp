@@ -38,6 +38,8 @@ namespace mamba
     };
 
     bool is_package_file(const std::string_view& fn);
+    fs::path strip_package_name(const std::string& file);
+
     void to_human_readable_filesize(std::ostream& o, double bytes, std::size_t precision = 0);
     bool lexists(const fs::path& p);
     std::vector<fs::path> filter_dir(const fs::path& dir, const std::string& suffix);

@@ -69,6 +69,7 @@ ext_modules = [
             'src/output.cpp',
             'src/package_handling.cpp',
             'src/prefix_data.cpp',
+            'src/package_info.cpp',
             'src/pool.cpp',
             'src/query.cpp',
             'src/repo.cpp',

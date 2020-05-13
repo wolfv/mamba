@@ -19,6 +19,22 @@ namespace mamba
         return ends_with(fn, ".tar.bz2") || ends_with(fn, ".conda");
     }
 
+    fs::path strip_package_name(const std::string& file)
+    {
+        if (ends_with(file, ".tar.bz2"))
+        {
+            return file.substr(0, file.size() - 8);
+        }
+        else if (ends_with(file, ".conda"))
+        {
+            return file.substr(0, file.size() - 6);
+        }
+        else
+        {
+            throw std::runtime_error("Don't know how to handle " + file);
+        }
+    }
+
     // TODO make sure this returns true even for broken symlinks
     // E.g.
     // ln -s abcdef emptylink
