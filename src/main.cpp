@@ -9,6 +9,7 @@
 #include "subdirdata.hpp"
 #include "solver.hpp"
 #include "shell_init.hpp"
+#include "channel.hpp"
 
 const char banner[] = R"MAMBARAW(
             _                                          _            
@@ -33,6 +34,7 @@ static struct {
 
 static struct {
     std::vector<std::string> specs;
+    std::vector<std::string> channels;
     std::string prefix;
     std::string name;
 } create_options;
@@ -164,6 +166,7 @@ void init_create_parser(CLI::App* subcom)
 {
     subcom->add_option("specs", create_options.specs, "Specs to install into the new environment");
     subcom->add_option("-p,--prefix", create_options.prefix, "Path to the Prefix");
+    subcom->add_option("-c,--channel", create_options.channels, "Channels");
     // subcom->add_option("-n,--name" create_options.name, "Prefix name");
 
     subcom->callback([&]() {
@@ -171,17 +174,23 @@ void init_create_parser(CLI::App* subcom)
         ctx.set_verbosity(global_options.verbosity);
         ctx.target_prefix = create_options.prefix;
 
-        if (fs::exists(ctx.target_prefix))
+        for (auto& cn : create_options.channels)
         {
-            throw std::runtime_error("Prefix already exists");
+            std::cout << cn << std::endl;
+            auto& chan = make_channel(cn);
+            std::cout << chan.url() << std::endl;
         }
-        else
-        {
-            fs::create_directories(ctx.target_prefix);
-            fs::create_directories(ctx.target_prefix / "conda-meta");
-            fs::create_directories(ctx.target_prefix / "pkgs");
-        }
-        install_specs(create_options.specs);
+        // if (fs::exists(ctx.target_prefix))
+        // {
+        //     throw std::runtime_error("Prefix already exists");
+        // }
+        // else
+        // {
+        //     fs::create_directories(ctx.target_prefix);
+        //     fs::create_directories(ctx.target_prefix / "conda-meta");
+        //     fs::create_directories(ctx.target_prefix / "pkgs");
+        // }
+        // install_specs(create_options.specs);
 
         return 0;
     });
