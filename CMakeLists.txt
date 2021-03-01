@@ -106,6 +106,7 @@ set(MAMBA_SOURCES
     ${MAMBA_SOURCE_DIR}/util.cpp
     ${MAMBA_SOURCE_DIR}/validate.cpp
     ${MAMBA_SOURCE_DIR}/version.cpp
+    ${MAMBA_SOURCE_DIR}/virtual_packages.cpp
     ${MAMBA_SOURCE_DIR}/thirdparty/WinReg.hpp
 )
 
@@ -142,6 +143,7 @@ set(MAMBA_HEADERS
     ${MAMBA_INCLUDE_DIR}/mamba/util.hpp
     ${MAMBA_INCLUDE_DIR}/mamba/validate.hpp
     ${MAMBA_INCLUDE_DIR}/mamba/version.hpp
+    ${MAMBA_INCLUDE_DIR}/mamba/virtual_packages.hpp
 )
 
 # Targets and link
@@ -184,6 +186,9 @@ macro(mamba_create_target target_name linkage output_name)
             ${YAML_CPP_LIBRARIES}
             reproc++
         )
+        if (NOT CMAKE_HOST_WIN32)
+            list(APPEND MAMBA_DEPENDENCIES_LIBS dl)
+        endif()
 
         target_link_libraries(${target_name} PUBLIC
                               ${MAMBA_DEPENDENCIES_LIBS}

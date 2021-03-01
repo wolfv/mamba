@@ -5,6 +5,7 @@
 // The full license is in the file LICENSE, distributed with this software.
 
 #include "mamba/prefix_data.hpp"
+#include "mamba/virtual_packages.hpp"
 #include "mamba/output.hpp"
 
 namespace mamba
@@ -27,6 +28,11 @@ namespace mamba
                     load_single_record(p.path());
                 }
             }
+        }
+
+        for (auto pkg : get_virtual_packages())
+        {
+            m_package_records.insert({ pkg.name, std::move(pkg) });
         }
     }
 

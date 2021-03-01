@@ -22,6 +22,14 @@ extern "C"
 
 namespace mamba
 {
+    enum PackageType
+    {
+        // NONE,
+        NOARCH_GENERIC,
+        NOARCH_PYTHON,
+        VIRTUAL_SYSTEM
+    };
+
     class PackageInfo
     {
     public:
@@ -44,6 +52,7 @@ namespace mamba
         std::string str() const;
         std::string long_str() const;
 
+        PackageType package_type;
         std::string name;
         std::string version;
         std::string build_string;
