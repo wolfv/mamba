@@ -30,8 +30,10 @@ namespace mamba
             }
         }
 
-        for (auto pkg : get_virtual_packages())
+        for (const auto& pkg : get_virtual_packages())
         {
+            LOG_INFO << "Adding virtual package: " << pkg.name << "=" << pkg.version << "="
+                     << pkg.build_string;
             m_package_records.insert({ pkg.name, std::move(pkg) });
         }
     }

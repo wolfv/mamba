@@ -37,6 +37,38 @@ namespace mamba
             return std::string(strip(out));
         }
 
+        std::string glibc_version()
+        {
+            // TODO figure out the paths for this
+            void* handle = dlopen("/lib64/libc.so.6", RTLD_LAZY);
+
+            if (!handle)
+            {
+                std::cerr << "Cannot open library: " << dlerror() << '\n';
+                return "";
+            }
+
+            // reset errors
+            dlerror();
+
+            typedef const char* (*func_t)(void);
+            auto* gnu_get_libc_version = (func_t)(dlsym(handle, "gnu_get_libc_version"));
+
+            const char* dlsym_error = dlerror();
+
+            if (dlsym_error)
+            {
+                LOG_ERROR << "Cannot load symbol 'gnu_get_libc_version': " << dlsym_error;
+                dlclose(handle);
+                return "";
+            }
+
+            const char* version = gnu_get_libc_version();
+            dlclose(handle);
+
+            return std::string(strip(version));
+        }
+
         std::string cuda_version()
         {
 #ifdef _WIN32
@@ -134,11 +166,11 @@ namespace mamba
             }
             if (on_linux)
             {
-                res.push_back(make_virtual_package("__linux"));
+                res.push_back(make_virtual_package("__glibc", detail::glibc_version()));
             }
             if (on_mac)
             {
-                res.push_back(make_virtual_package("__osx", macos_version()));
+                res.push_back(make_virtual_package("__osx", detail::macos_version()));
             }
             return res;
         }
