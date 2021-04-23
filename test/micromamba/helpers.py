@@ -111,6 +111,14 @@ def install(*args, default_channel=True, no_rc=True, no_dry_run=False):
             return
     if "--print-config-only" in args:
         return yaml.load(res, Loader=yaml.FullLoader)
+
+    if "--print-context-only" in args:
+        res = res.decode('utf8')
+        lines = [x.strip() for x in res.splitlines()]
+        begin = lines.index(">>> MAMBA CONTEXT <<<")
+        end = lines.index(">>> END MAMBA CONTEXT <<<")
+        return yaml.load("\n".join(lines[begin + 1:end]))
+
     return res.decode()
 
 

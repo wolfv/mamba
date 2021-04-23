@@ -848,6 +848,7 @@ namespace mamba
         m_load_lock = false;
 
         init_curl_ssl();
+        CONTEXT_DEBUGGING;
         CONFIG_DEBUGGING;
     }
 

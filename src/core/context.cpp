@@ -135,6 +135,8 @@ namespace mamba
                   PRINT_CTX(verbosity)
                   PRINT_CTX(channel_alias)
                   << "channel_priority: " << (int) channel_priority << "\n"
+                  PRINT_CTX_VEC(pkgs_dirs)
+                  PRINT_CTX_VEC(envs_dirs)
                   PRINT_CTX_VEC(default_channels)
                   PRINT_CTX_VEC(channels)
                   PRINT_CTX_VEC(pinned_packages)
