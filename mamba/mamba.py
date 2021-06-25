@@ -712,10 +712,23 @@ def repoquery(args, parser):
     print("\n")
     print(repoquery_api._repoquery(args.subcmd, args.package_query, pool, fmt))
 
+def shell_init(args, parser, func_name):
+    from importlib import import_module
+    # module = import_module("conda.cli" + .main_init, __name__.rsplit(".", 1)[0])
+    # exit_code = getattr(module, func_name)(args, parser)
+    exit_code = 0
+    if exit_code == 0:
+        # continue with initializing mamba
+        print("Preparing shell for mamba usage.")
+        print("called shell init with ", args, parser)
+        from .mamba_shell_init import shell_init as shi
+        shi(args)
+    return 0
 
 def do_call(args, parser):
     relative_mod, func_name = args.func.rsplit(".", 1)
 
+    print("RELATIVE MOD: ", relative_mod)
     # func_name should always be 'execute'
     if relative_mod in [
         ".main_list",
@@ -738,12 +751,13 @@ def do_call(args, parser):
         exit_code = update(args, parser)
     elif relative_mod == ".main_repoquery":
         exit_code = repoquery(args, parser)
+    elif relative_mod == ".main_init":
+        exit_code = shell_init(args, parser, func_name)
     else:
         print(
             "Currently, only install, create, list, search, run,"
             " info and clean are supported through mamba."
         )
-
         return 0
     return exit_code
 
@@ -847,7 +861,7 @@ def _wrapped_main(*args, **kwargs):
         print(banner)
 
     init_loggers(context)
-
+    print("DO CALL: ", args, p)
     result = do_call(args, p)
     exit_code = getattr(
         result, "rc", result
