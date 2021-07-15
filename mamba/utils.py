@@ -236,6 +236,13 @@ def init_api_context(use_mamba_experimental=False):
 
 
 def to_conda_channel(channel, platform):
+    if channel.scheme == "file":
+        file_loc = "file://"
+        for el in [channel.location, channel.name, platform, channel.package_filename]:
+            if el:
+                file_loc += "/" + el
+        return CondaChannel.from_value(file_loc)
+
     return CondaChannel(
         channel.scheme,
         channel.auth,
