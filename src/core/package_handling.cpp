@@ -10,12 +10,15 @@
 
 #include <sstream>
 
+#include <reproc++/run.hpp>
+
 #include "nlohmann/json.hpp"
 #include "mamba/core/package_handling.hpp"
 #include "mamba/core/package_paths.hpp"
 #include "mamba/core/output.hpp"
 #include "mamba/core/thread_utils.hpp"
 #include "mamba/core/util.hpp"
+#include "mamba/core/util_os.hpp"
 #include "mamba/core/validate.hpp"
 
 namespace mamba
@@ -391,24 +394,50 @@ namespace mamba
         }
     }
 
-    fs::path extract(const fs::path& file)
+    static fs::path extract_dest_dir(const fs::path& file)
     {
-        std::string dest_dir = file;
-        if (ends_with(dest_dir, ".tar.bz2"))
+        if (ends_with(file.string(), ".tar.bz2"))
         {
-            dest_dir = dest_dir.substr(0, dest_dir.size() - 8);
-            extract_archive(file, dest_dir);
+            return file.string().substr(0, file.string().size() - 8);
         }
-        else if (ends_with(dest_dir, ".conda"))
+        else if (ends_with(file.string(), ".conda"))
         {
-            dest_dir = dest_dir.substr(0, dest_dir.size() - 6);
-            extract_conda(file, dest_dir);
+            return file.string().substr(0, file.string().size() - 6);
         }
         else
         {
             throw std::runtime_error("Unknown package format (" + file.string() + ")");
         }
+    }
+
+    fs::path extract(const fs::path& file)
+    {
+        auto dest_dir = extract_dest_dir(file);
+        if (ends_with(file.string(), ".tar.bz2"))
+        {
+            extract_archive(file, dest_dir);
+        }
+        else
+        {
+            extract_conda(file, dest_dir);
+        }
         return dest_dir;
+    }
+
+    fs::path extract_subproc(const fs::path& file)
+    {
+        std::vector<std::string> args = { get_self_exe_path(), "package", "extract", file };
+        std::string out, err;
+        auto [status, ec] = reproc::run(
+            args, reproc::options{}, reproc::sink::string(out), reproc::sink::string(err));
+        /*
+        LOG_INFO << "Exit status " << args[0] << " " << args[1] << " " << args[2] << " " << args[3] << " " << status << " " << ec.value() << " " << ec.message() << " stdout: " << out << "stderr: " << err;
+        if (ec)
+        {
+            throw std::runtime_error("Error extracting " + file.string() + " with 'mamba extract': " + err);
+        }
+        */
+        return extract_dest_dir(file);
     }
 
     bool transmute(const fs::path& pkg_file, const fs::path& target, int compression_level)

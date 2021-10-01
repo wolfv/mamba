@@ -87,7 +87,6 @@ namespace mamba
         std::future<bool> m_extract_future;
 
         VALIDATION_RESULT m_validation_result = VALIDATION_RESULT::UNDEFINED;
-        static std::mutex extract_mutex;
     };
 
     class MTransaction
