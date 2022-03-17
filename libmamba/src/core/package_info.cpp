@@ -258,6 +258,11 @@ namespace mamba
         }
     }
 
+    // PackageInfo::PackageInfo(const MatchSpec& ms)
+    // {
+        
+    // }
+
     PackageInfo::PackageInfo(const std::string& n)
         : name(n)
     {

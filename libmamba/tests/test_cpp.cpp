@@ -71,6 +71,30 @@ namespace mamba
         EXPECT_EQ(b, "*");
     }
 
+    TEST(match_spec, parse_url)
+    {
+        {
+            MatchSpec ms("https://localhost:1234/mypkg-1.23.0-hc343434_0.tar.bz2");
+            EXPECT_EQ(ms.fn, "mypkg-1.23.0-hc343434_0.tar.bz2");
+            EXPECT_EQ(ms.version, "1.23.0");
+            EXPECT_EQ(ms.name, "mypkg");
+            EXPECT_EQ(ms.build, "hc343434_0");
+            EXPECT_EQ(ms.channel, "https://localhost:1234/");
+            EXPECT_EQ(ms.url, "https://localhost:1234/mypkg-1.23.0-hc343434_0.tar.bz2");
+        }
+
+        {
+            MatchSpec ms("https://localhost:1234/t/mysupertokenjdkajs23434/mypkg-1.23.0-hc343434_0.tar.bz2");
+            EXPECT_EQ(ms.fn, "mypkg-1.23.0-hc343434_0.tar.bz2");
+            EXPECT_EQ(ms.version, "1.23.0");
+            EXPECT_EQ(ms.name, "mypkg");
+            EXPECT_EQ(ms.build, "hc343434_0");
+            EXPECT_EQ(ms.channel, "https://localhost:1234/");
+            EXPECT_EQ(ms.url, "https://localhost:1234/t/mysupertokenjdkajs23434/mypkg-1.23.0-hc343434_0.tar.bz2");
+        }
+    }
+
+
     TEST(match_spec, parse)
     {
         {
