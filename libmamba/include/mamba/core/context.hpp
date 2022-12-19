@@ -235,6 +235,8 @@ namespace mamba
 
         bool override_channels_enabled = true;
 
+        std::vector<std::string> experimental_zstd_channels;
+
 
         std::vector<std::string> pinned_packages = {};
 
