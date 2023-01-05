@@ -16,14 +16,14 @@ namespace mamba
 {
     std::vector<PackageInfo> get_virtual_packages();
 
+    PackageInfo make_virtual_package(const std::string& name,
+                                     const std::string& version = "",
+                                     const std::string& build_string = "");
+
     namespace detail
     {
         std::string cuda_version();
         std::string get_arch();
-
-        PackageInfo make_virtual_package(const std::string& name,
-                                         const std::string& version = "",
-                                         const std::string& build_string = "");
 
         std::vector<PackageInfo> dist_packages();
     }

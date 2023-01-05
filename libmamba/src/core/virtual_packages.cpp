@@ -133,21 +133,6 @@ namespace mamba
             return "";
         }
 
-        PackageInfo make_virtual_package(const std::string& name,
-                                         const std::string& version,
-                                         const std::string& build_string)
-        {
-            PackageInfo res(name);
-            res.version = version.size() ? version : "0";
-            res.build_string = build_string.size() ? build_string : "0";
-            res.build_number = 0;
-            res.channel = "@";
-            res.subdir = Context::instance().platform;
-            res.md5 = "12345678901234567890123456789012";
-            res.fn = name;
-            return res;
-        }
-
         std::vector<PackageInfo> dist_packages()
         {
             LOG_DEBUG << "Loading distribution virtual packages";
@@ -221,6 +206,21 @@ namespace mamba
         }
     }
 
+    PackageInfo make_virtual_package(const std::string& name,
+                                     const std::string& version,
+                                     const std::string& build_string)
+    {
+        PackageInfo res(name);
+        res.version = version.size() ? version : "0";
+        res.build_string = build_string.size() ? build_string : "0";
+        res.build_number = 0;
+        res.channel = "@";
+        res.subdir = Context::instance().platform;
+        res.md5 = "12345678901234567890123456789012";
+        res.fn = name;
+        return res;
+    }
+
     std::vector<PackageInfo> get_virtual_packages()
     {
         LOG_DEBUG << "Loading virtual packages";
@@ -229,7 +229,7 @@ namespace mamba
         auto cuda_ver = detail::cuda_version();
         if (!cuda_ver.empty())
         {
-            res.push_back(detail::make_virtual_package("__cuda", cuda_ver));
+            res.push_back(make_virtual_package("__cuda", cuda_ver));
         }
 
         return res;
