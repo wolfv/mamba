@@ -10,6 +10,7 @@
 #include "mamba/core/subdirdata.hpp"
 #include "mamba/core/url.hpp"
 #include "mamba/core/util.hpp"
+#include <iostream>
 
 #include "progress_bar_impl.hpp"
 #include <stdexcept>
@@ -165,24 +166,6 @@ namespace mamba
         }
     }
 
-    void MSubdirData::check_repodata_existence()
-    {
-        // check if repodata.json.zst, repodata.json.bz2 and repodata.json.jlap exist
-        // and set the corresponding flags
-        auto repodata_url_zst = m_repodata_url + ".zst";
-        auto repodata_url_bz2 = m_repodata_url + ".bz2";
-
-        bool zst_exists = DownloadTarget(repodata_url_zst, repodata_url_zst, "").resource_exists();
-        bool bz2_exists = DownloadTarget(repodata_url_bz2, repodata_url_bz2, "").resource_exists();
-
-        if (m_repodata_url.size() > 5)
-        {
-            auto repodata_url_jlap = m_repodata_url.substr(0, m_repodata_url.size() - 5) + ".jlap";
-            bool jlap_exists
-                = DownloadTarget(repodata_url_jlap, repodata_url_jlap, "").resource_exists();
-        }
-    }
-
     expected_t<MSubdirData> MSubdirData::create(const Channel& channel,
                                                 const std::string& platform,
                                                 const std::string& url,
@@ -220,7 +203,6 @@ namespace mamba
         , p_channel(&channel)
     {
         m_json_fn = cache_fn_url(m_repodata_url);
-        check_repodata_existence();
         m_solv_fn = m_json_fn.substr(0, m_json_fn.size() - 4) + "solv";
         load(caches);
     }
@@ -242,11 +224,16 @@ namespace mamba
         , m_is_noarch(rhs.m_is_noarch)
         , m_metadata(std::move(rhs.m_metadata))
         , m_temp_file(std::move(rhs.m_temp_file))
+        , m_check_targets(std::move(rhs.m_check_targets))
         , p_channel(rhs.p_channel)
     {
         if (m_target != nullptr)
         {
             m_target->set_finalize_callback(&MSubdirData::finalize_transfer, this);
+        }
+        for (auto& t : m_check_targets)
+        {
+            t->set_finalize_callback(&MSubdirData::finalize_check, this);
         }
     }
 
@@ -269,6 +256,7 @@ namespace mamba
         swap(m_is_noarch, rhs.m_is_noarch);
         swap(m_metadata, rhs.m_metadata);
         swap(m_temp_file, rhs.m_temp_file);
+        swap(m_check_targets, rhs.m_check_targets);
         swap(p_channel, rhs.p_channel);
 
         if (m_target != nullptr)
@@ -279,6 +267,16 @@ namespace mamba
         {
             rhs.m_target->set_finalize_callback(&MSubdirData::finalize_transfer, &rhs);
         }
+
+        for (auto& t : m_check_targets)
+        {
+            t->set_finalize_callback(&MSubdirData::finalize_check, this);
+        }
+        for (auto& t : rhs.m_check_targets)
+        {
+            t->set_finalize_callback(&MSubdirData::finalize_check, &rhs);
+        }
+
         return *this;
     }
 
@@ -307,6 +305,35 @@ namespace mamba
     {
         return starts_with(m_repodata_url, "file://");
     }
+
+    void MSubdirData::finalize_checks()
+    {
+        create_target();
+    }
+
+    bool MSubdirData::finalize_check(const DownloadTarget& target)
+    {
+        LOG_INFO << "Checked: " << target.url() << " [" << target.http_status << "]";
+        if (target.http_status == 200)
+        {
+            if (ends_with(target.url(), ".zst"))
+            {
+                this->m_metadata.has_zst = true;
+            }
+            else if (ends_with(target.url(), ".jlap"))
+            {
+                this->m_metadata.has_jlap = true;
+            }
+        }
+        return true;
+    }
+
+    std::vector<DownloadTarget*>& MSubdirData::check_targets()
+    {
+        // check if zst or jlap are available
+        return m_check_targets;
+    }
+
 
     bool MSubdirData::load(MultiPackageCache& caches)
     {
@@ -407,13 +434,33 @@ namespace mamba
             if (!m_expired_cache_path.empty())
                 LOG_INFO << "Expired cache (or invalid mod/etag headers) found at '"
                          << m_expired_cache_path.string() << "'";
+
             if (!Context::instance().offline || forbid_cache())
             {
                 auto& zstd_channels = Context::instance().experimental_zstd_channels;
-                bool use_zstd
-                    = std::find(zstd_channels.begin(), zstd_channels.end(), p_channel->name())
-                      != zstd_channels.end();
-                create_target(m_metadata, use_zstd);
+                // bool use_zstd
+                //     = std::find(zstd_channels.begin(), zstd_channels.end(), p_channel->name())
+                //       != zstd_channels.end();
+
+                m_check_targets.push_back(
+                    new DownloadTarget(m_name + "-zst-check", m_repodata_url + ".zst", ""));
+                m_check_targets.back()->set_head_only(true);
+                m_check_targets.back()->set_finalize_callback(&MSubdirData::finalize_check, this);
+                m_check_targets.back()->set_ignore_failure(true);
+
+                if (m_repodata_url.size() > 5)
+                {
+                    m_check_targets.push_back(new DownloadTarget(
+                        m_name + "-jlap-check",
+                        m_repodata_url.substr(0, m_repodata_url.size() - 5) + ".jlap",
+                        ""));
+                    m_check_targets.back()->set_head_only(true);
+                    m_check_targets.back()->set_finalize_callback(&MSubdirData::finalize_check,
+                                                                  this);
+                    m_check_targets.back()->set_ignore_failure(true);
+                }
+
+                create_target();
             }
         }
         return true;
@@ -477,7 +524,7 @@ namespace mamba
         }
     }
 
-    bool MSubdirData::finalize_transfer()
+    bool MSubdirData::finalize_transfer(const DownloadTarget& target)
     {
         if (m_target->result != 0 || m_target->http_status >= 400)
         {
@@ -590,15 +637,15 @@ namespace mamba
         json_file = writable_cache_dir / m_json_fn;
         auto lock = LockFile(writable_cache_dir);
 
-        auto latest_write_time = fs::file_time_type::clock::now();
+        auto latest_write_time
+            = fs::last_write_time(m_temp_file->path()).time_since_epoch().count();
         auto file_size = fs::file_size(m_temp_file->path());
 
-        m_metadata = { .url = m_target->url(),
-                       .etag = m_target->etag,
-                       .mod = m_target->mod,
-                       .cache_control = m_target->cache_control,
-                       .stored_mtime = latest_write_time,
-                       .stored_file_size = file_size };
+        m_metadata.url = m_target->url();
+        m_metadata.etag = m_target->etag;
+        m_metadata.mod = m_target->mod;
+        m_metadata.cache_control = m_target->cache_control;
+        m_metadata.stored_file_size = file_size;
 
         if (m_use_old_cache)
         {
@@ -641,6 +688,7 @@ namespace mamba
             fs::u8path state_file = json_file;
             state_file.replace_extension(".state.json");
             fs::rename(m_temp_file->path(), json_file);
+            m_metadata.stored_mtime = fs::last_write_time(json_file);
             std::ofstream state_file_stream = open_ofstream(state_file);
             m_metadata.serialize_to_stream(state_file_stream);
         }
@@ -660,12 +708,19 @@ namespace mamba
         return true;
     }
 
-    void MSubdirData::create_target(const subdir_metadata& mod_etag, bool use_zstd)
+    void MSubdirData::create_target()
     {
         auto& ctx = Context::instance();
         m_temp_file = std::make_unique<TemporaryFile>();
+
+        LOG_INFO << "Creating target with " << m_metadata.has_zst.value_or(false) << " "
+                 << m_repodata_url;
+        // LOG_INFO << "Creating target with " << m_metadata.has_zst.has_value() << " " <<
+        // m_repodata_url;
         m_target = std::make_unique<DownloadTarget>(
-            m_name, m_repodata_url + (use_zstd ? ".zst" : ""), m_temp_file->path().string());
+            m_name,
+            m_repodata_url + (m_metadata.has_zst.value_or(false) ? ".zst" : ""),
+            m_temp_file->path().string());
         if (!(ctx.no_progress_bars || ctx.quiet || ctx.json))
         {
             m_progress_bar = Console::instance().add_progress_bar(m_name);
@@ -678,7 +733,7 @@ namespace mamba
             m_target->set_ignore_failure(true);
         }
         m_target->set_finalize_callback(&MSubdirData::finalize_transfer, this);
-        m_target->set_mod_etag_headers(mod_etag.mod, mod_etag.etag);
+        m_target->set_mod_etag_headers(m_metadata.mod, m_metadata.etag);
     }
 
     std::size_t MSubdirData::get_cache_control_max_age(const std::string& val)

@@ -78,9 +78,12 @@ namespace mamba
         expected_t<std::string> cache_path() const;
         const std::string& name() const;
 
+        std::vector<DownloadTarget*>& check_targets();
         DownloadTarget* target();
-        bool finalize_transfer();
 
+        bool finalize_check(const DownloadTarget& target);
+        bool finalize_transfer(const DownloadTarget& target);
+        void finalize_checks();
         expected_t<MRepo&> create_repo(MPool& pool);
 
     private:
@@ -92,10 +95,12 @@ namespace mamba
 
         bool load(MultiPackageCache& caches);
         void check_repodata_existence();
-        void create_target(const subdir_metadata& mod_etag, bool use_zstd);
+        void create_target();
         std::size_t get_cache_control_max_age(const std::string& val);
         void refresh_last_write_time(const fs::u8path& json_file, const fs::u8path& solv_file);
+
         std::unique_ptr<DownloadTarget> m_target = nullptr;
+        std::vector<DownloadTarget*> m_check_targets;
 
         bool m_json_cache_valid = false;
         bool m_solv_cache_valid = false;

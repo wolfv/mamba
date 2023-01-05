@@ -69,8 +69,6 @@ namespace mamba
                     continue;
                 }
                 auto sdir = std::move(sdires).value();
-
-                multi_dl.add(sdir.target());
                 subdirs.push_back(std::move(sdir));
                 if (ctx.channel_priority == ChannelPriority::kDisabled)
                 {
@@ -88,7 +86,60 @@ namespace mamba
                 }
             }
         }
-        // TODO load local channels even when offline
+        MultiDownloadTarget multi_dl_checker;
+        for (auto& subdir : subdirs)
+        {
+            for (auto& check_target : subdir.check_targets())
+            {
+                multi_dl_checker.add(check_target);
+            }
+        }
+        multi_dl_checker.download(false);
+
+        for (auto& subdir : subdirs)
+        {
+            if (!subdir.check_targets().empty())
+            {
+                // recreate final download target
+                subdir.finalize_checks();
+            }
+            LOG_INFO << "Adding " << subdir.target()->url() << " to download queue";
+            multi_dl.add(subdir.target());
+        }
+
+        // for (auto channel : get_channels(channel_urls))
+        // {
+        //     for (auto& [platform, url] : channel->platform_urls(true))
+        //     {
+        //         auto sdires
+        //             = MSubdirData::create(*channel, platform, url, package_caches,
+        //             "repodata.json");
+        //         if (!sdires.has_value())
+        //         {
+        //             error_list.push_back(std::move(sdires).error());
+        //             continue;
+        //         }
+        //         auto sdir = std::move(sdires).value();
+
+        //         multi_dl.add(sdir.target());
+        //         subdirs.push_back(std::move(sdir));
+        //         if (ctx.channel_priority == ChannelPriority::kDisabled)
+        //         {
+        //             priorities.push_back(std::make_pair(0, 0));
+        //         }
+        //         else
+        //         {
+        //             // Consider 'flexible' and 'strict' the same way
+        //             if (channel->name() != prev_channel_name)
+        //             {
+        //                 max_prio--;
+        //                 prev_channel_name = channel->name();
+        //             }
+        //             priorities.push_back(std::make_pair(max_prio, 0));
+        //         }
+        //     }
+        // }
+        // TODO load local channels even when offline if (!ctx.offline)
         if (!ctx.offline)
         {
             try
