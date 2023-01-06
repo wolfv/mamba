@@ -31,17 +31,33 @@ namespace mamba
 {
     struct subdir_metadata
     {
+        struct checked_at
+        {
+            bool value;
+            std::time_t time;
+
+            bool has_expired() const
+            {
+                // difference in seconds, check every 14 days
+                return std::difftime(std::time(nullptr), time) > 60 * 60 * 24 * 14;
+            }
+        };
+
+        static tl::expected<subdir_metadata, std::exception> from_stream(std::istream& in);
+
         std::string url;
         std::string etag;
         std::string mod;
         std::string cache_control;
-        std::filesystem::file_time_type stored_mtime;
+        // std::chrono::seconds stored_mtime;
+        fs::file_time_type stored_mtime;
         std::size_t stored_file_size;
-        std::optional<bool> has_zst;
-        std::optional<bool> has_bz2;
-        std::optional<bool> has_jlap;
+        std::optional<checked_at> has_zst;
+        std::optional<checked_at> has_bz2;
+        std::optional<checked_at> has_jlap;
 
         void serialize_to_stream(std::ostream& out) const;
+        void serialize_to_stream_tiny(std::ostream& out) const;
     };
 
 
@@ -78,7 +94,7 @@ namespace mamba
         expected_t<std::string> cache_path() const;
         const std::string& name() const;
 
-        std::vector<DownloadTarget*>& check_targets();
+        std::vector<std::unique_ptr<DownloadTarget>>& check_targets();
         DownloadTarget* target();
 
         bool finalize_check(const DownloadTarget& target);
@@ -100,7 +116,7 @@ namespace mamba
         void refresh_last_write_time(const fs::u8path& json_file, const fs::u8path& solv_file);
 
         std::unique_ptr<DownloadTarget> m_target = nullptr;
-        std::vector<DownloadTarget*> m_check_targets;
+        std::vector<std::unique_ptr<DownloadTarget>> m_check_targets;
 
         bool m_json_cache_valid = false;
         bool m_solv_cache_valid = false;

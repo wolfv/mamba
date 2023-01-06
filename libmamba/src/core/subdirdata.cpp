@@ -25,15 +25,64 @@ namespace mamba
         j["mod"] = mod;
         j["cache_control"] = cache_control;
         j["file_size"] = stored_file_size;
-        j["mtime"] = stored_mtime.time_since_epoch().count();
+
+        auto secs
+            = std::chrono::duration_cast<std::chrono::seconds>(stored_mtime.time_since_epoch());
+        j["mtime"]["seconds"] = secs.count();
+        j["mtime"]["nanoseconds"] = (stored_mtime.time_since_epoch() - secs).count();
+
         if (has_zst.has_value())
-            j["has_zst"] = has_zst.value();
-        if (has_bz2.has_value())
-            j["has_bz2"] = has_bz2.value();
-        if (has_jlap.has_value())
-            j["has_jlap"] = has_jlap.value();
+        {
+            j["has_zst"]["value"] = has_zst.value().value;
+            j["has_zst"]["timestamp"] = timestamp(has_zst.value().time);
+        }
         out << j.dump(4);
     }
+
+    void subdir_metadata::serialize_to_stream_tiny(std::ostream& out) const
+    {
+        nlohmann::json j;
+        j["_url"] = url;
+        j["_etag"] = etag;
+        j["_mod"] = mod;
+        j["_cache_control"] = cache_control;
+        out << j.dump();
+    }
+
+    tl::expected<subdir_metadata, std::exception> subdir_metadata::from_stream(std::istream& in)
+    {
+        nlohmann::json j = nlohmann::json::parse(in);
+        subdir_metadata m;
+        try
+        {
+            m.url = j["url"].get<std::string>();
+            m.etag = j["etag"].get<std::string>();
+            m.mod = j["mod"].get<std::string>();
+            m.cache_control = j["cache_control"].get<std::string>();
+            m.stored_file_size = j["file_size"].get<std::size_t>();
+            m.stored_mtime = fs::file_time_type(
+                std::chrono::seconds(j["mtime"]["seconds"].get<std::size_t>())
+                + std::chrono::nanoseconds(j["mtime"]["nanoseconds"].get<std::size_t>()));
+
+            int err_code = 0;
+            if (j.find("has_zst") != j.end())
+            {
+                m.has_zst = { j["has_zst"]["value"].get<bool>(),
+                              parse_utc_timestamp(j["has_zst"]["timestamp"].get<std::string>(),
+                                                  err_code) };
+            }
+        }
+        catch (const nlohmann::json::exception& e)
+        {
+            return tl::unexpected(std::runtime_error(e.what()));
+        }
+        catch (const std::exception& e)
+        {
+            return tl::unexpected(std::runtime_error(e.what()));
+        }
+        return m;
+    }
+
 
     namespace detail
     {
@@ -42,33 +91,31 @@ namespace mamba
             auto state_file = file;
             state_file.replace_extension(".state.json");
             std::error_code ec;
+
             if (fs::exists(state_file, ec))
             {
                 auto infile = open_ifstream(state_file);
-                auto json = nlohmann::json::parse(infile);
-                auto lwrite_time = fs::last_write_time(file);
-                if (lwrite_time.time_since_epoch().count() != json["mtime"])
+                auto m = subdir_metadata::from_stream(infile);
+                if (!m.has_value())
                 {
+                    LOG_WARNING << "Could not parse state file" << m.error().what();
+                    fs::remove(state_file, ec);
+                    return tl::unexpected(std::runtime_error("Could not parse state file"));
+                }
+
+                if (fs::last_write_time(file) != m.value().stored_mtime)
+                {
+                    LOG_WARNING << "Cache file mtime mismatch";
+                    // TODO clear out json file values?
+                    m.value().etag = "";
+                    m.value().mod = "";
+                    m.value().cache_control = "";
+                    m.value().stored_file_size = 0;
+                    m.value().stored_mtime = fs::file_time_type::min();
                     return tl::unexpected(std::runtime_error("Cache file mtime mismatch"));
                 }
-                try
-                {
-                    subdir_metadata m{
-                        .url = json["url"],
-                        .etag = json["etag"],
-                        .mod = json["mod"],
-                        .cache_control = json["cache_control"],
-                        .stored_mtime = lwrite_time,  // is the same as tested above
-                        .stored_file_size = json["file_size"],
 
-                    };
-                    return m;
-                }
-                catch (const nlohmann::json::exception& e)
-                {
-                    fs::remove(state_file, ec);
-                    return tl::unexpected(std::runtime_error(e.what()));
-                }
+                return m.value();
             }
 
             // parse json at the beginning of the stream such as
@@ -209,6 +256,7 @@ namespace mamba
 
     MSubdirData::MSubdirData(MSubdirData&& rhs)
         : m_target(std::move(rhs.m_target))
+        , m_check_targets(std::move(rhs.m_check_targets))
         , m_json_cache_valid(rhs.m_json_cache_valid)
         , m_solv_cache_valid(rhs.m_solv_cache_valid)
         , m_valid_cache_path(std::move(rhs.m_valid_cache_path))
@@ -224,7 +272,6 @@ namespace mamba
         , m_is_noarch(rhs.m_is_noarch)
         , m_metadata(std::move(rhs.m_metadata))
         , m_temp_file(std::move(rhs.m_temp_file))
-        , m_check_targets(std::move(rhs.m_check_targets))
         , p_channel(rhs.p_channel)
     {
         if (m_target != nullptr)
@@ -314,23 +361,17 @@ namespace mamba
     bool MSubdirData::finalize_check(const DownloadTarget& target)
     {
         LOG_INFO << "Checked: " << target.url() << " [" << target.http_status << "]";
-        if (target.http_status == 200)
+        if (ends_with(target.url(), ".zst"))
         {
-            if (ends_with(target.url(), ".zst"))
-            {
-                this->m_metadata.has_zst = true;
-            }
-            else if (ends_with(target.url(), ".jlap"))
-            {
-                this->m_metadata.has_jlap = true;
-            }
+            this->m_metadata.has_zst
+                = { .value = target.http_status == 200, .time = utc_time_now() };
         }
         return true;
     }
 
-    std::vector<DownloadTarget*>& MSubdirData::check_targets()
+    std::vector<std::unique_ptr<DownloadTarget>>& MSubdirData::check_targets()
     {
-        // check if zst or jlap are available
+        // check if zst or (later) jlap are available
         return m_check_targets;
     }
 
@@ -362,6 +403,11 @@ namespace mamba
             if (cache_age != fs::file_time_type::duration::max() && !forbid_cache())
             {
                 auto metadata_temp = detail::read_mod_and_etag(json_file);
+                if (!metadata_temp.has_value())
+                {
+                    LOG_INFO << "Invalid json cache found, ignoring";
+                    continue;
+                }
                 if (metadata_temp.has_value())
                 {
                     m_metadata = std::move(metadata_temp.value());
@@ -437,29 +483,15 @@ namespace mamba
 
             if (!Context::instance().offline || forbid_cache())
             {
-                auto& zstd_channels = Context::instance().experimental_zstd_channels;
-                // bool use_zstd
-                //     = std::find(zstd_channels.begin(), zstd_channels.end(), p_channel->name())
-                //       != zstd_channels.end();
-
-                m_check_targets.push_back(
-                    new DownloadTarget(m_name + "-zst-check", m_repodata_url + ".zst", ""));
-                m_check_targets.back()->set_head_only(true);
-                m_check_targets.back()->set_finalize_callback(&MSubdirData::finalize_check, this);
-                m_check_targets.back()->set_ignore_failure(true);
-
-                if (m_repodata_url.size() > 5)
+                if (!m_metadata.has_zst.has_value() || m_metadata.has_zst.value().has_expired())
                 {
-                    m_check_targets.push_back(new DownloadTarget(
-                        m_name + "-jlap-check",
-                        m_repodata_url.substr(0, m_repodata_url.size() - 5) + ".jlap",
-                        ""));
+                    m_check_targets.push_back(std::make_unique<DownloadTarget>(
+                        m_name + "-zst-check", m_repodata_url + ".zst", ""));
                     m_check_targets.back()->set_head_only(true);
                     m_check_targets.back()->set_finalize_callback(&MSubdirData::finalize_check,
                                                                   this);
                     m_check_targets.back()->set_ignore_failure(true);
                 }
-
                 create_target();
             }
         }
@@ -493,6 +525,7 @@ namespace mamba
     void MSubdirData::refresh_last_write_time(const fs::u8path& json_file,
                                               const fs::u8path& solv_file)
     {
+        LOG_WARNING << "refresh_last_write_time" << json_file;
         auto now = fs::file_time_type::clock::now();
 
         auto json_age = check_cache(json_file, now);
@@ -515,12 +548,9 @@ namespace mamba
             auto state_file = json_file;
             state_file.replace_extension(".state.json");
             auto lock = LockFile(state_file);
-            auto state_file_in = open_ifstream(state_file);
-            nlohmann::json state = nlohmann::json::parse(state_file_in);
-            state_file_in.close();
-            state["last_write_time"] = fs::last_write_time(json_file).time_since_epoch().count();
+            m_metadata.stored_mtime = fs::last_write_time(json_file);
             auto outf = open_ofstream(state_file);
-            outf << state.dump(4);
+            m_metadata.serialize_to_stream(outf);
         }
     }
 
@@ -637,8 +667,6 @@ namespace mamba
         json_file = writable_cache_dir / m_json_fn;
         auto lock = LockFile(writable_cache_dir);
 
-        auto latest_write_time
-            = fs::last_write_time(m_temp_file->path()).time_since_epoch().count();
         auto file_size = fs::file_size(m_temp_file->path());
 
         m_metadata.url = m_target->url();
@@ -664,7 +692,7 @@ namespace mamba
 
             std::ifstream temp_file = open_ifstream(m_temp_file->path());
             std::stringstream temp_json;
-            // temp_json << m_mod_etag.dump();
+            m_metadata.serialize_to_stream_tiny(temp_json);
 
             // replace `}` with `,`
             temp_json.seekp(-1, temp_json.cur);
@@ -682,12 +710,14 @@ namespace mamba
                                                      json_file.string(),
                                                      strerror(errno)));
             }
+            fs::last_write_time(json_file, fs::now());
         }
         else
         {
             fs::u8path state_file = json_file;
             state_file.replace_extension(".state.json");
             fs::rename(m_temp_file->path(), json_file);
+            fs::last_write_time(json_file, fs::now());
             m_metadata.stored_mtime = fs::last_write_time(json_file);
             std::ofstream state_file_stream = open_ofstream(state_file);
             m_metadata.serialize_to_stream(state_file_stream);
@@ -703,8 +733,6 @@ namespace mamba
         m_json_cache_valid = true;
         m_loaded = true;
 
-        fs::last_write_time(json_file, fs::now());
-
         return true;
     }
 
@@ -713,21 +741,16 @@ namespace mamba
         auto& ctx = Context::instance();
         m_temp_file = std::make_unique<TemporaryFile>();
 
-        LOG_INFO << "Creating target with " << m_metadata.has_zst.value_or(false) << " "
-                 << m_repodata_url;
-        // LOG_INFO << "Creating target with " << m_metadata.has_zst.has_value() << " " <<
-        // m_repodata_url;
+        bool use_zst = m_metadata.has_zst.has_value() && m_metadata.has_zst.value().value;
         m_target = std::make_unique<DownloadTarget>(
-            m_name,
-            m_repodata_url + (m_metadata.has_zst.value_or(false) ? ".zst" : ""),
-            m_temp_file->path().string());
+            m_name, m_repodata_url + (use_zst ? ".zst" : ""), m_temp_file->path().string());
         if (!(ctx.no_progress_bars || ctx.quiet || ctx.json))
         {
             m_progress_bar = Console::instance().add_progress_bar(m_name);
             m_target->set_progress_bar(m_progress_bar);
         }
-        // if we get something _other_ than the noarch, we DO NOT throw if the file
-        // can't be retrieved
+        // if we get something _other_ than the noarch, we DO NOT throw if the file can't be
+        // retrieved
         if (!m_is_noarch)
         {
             m_target->set_ignore_failure(true);
