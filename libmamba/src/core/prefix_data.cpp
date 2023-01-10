@@ -47,7 +47,7 @@ namespace mamba
     void PrefixData::load()
     {
         auto conda_meta_dir = m_prefix_path / "conda-meta";
-        if (lexists(conda_meta_dir))
+        if (lexists(conda_meta_dir).value_or(false))
         {
             for (auto& p : fs::directory_iterator(conda_meta_dir))
             {

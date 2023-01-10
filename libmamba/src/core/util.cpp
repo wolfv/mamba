@@ -67,16 +67,20 @@ namespace mamba
     // ln -s abcdef emptylink
     // fs::exists(emptylink) == false
     // lexists(emptylink) == true
-    bool lexists(const fs::u8path& path, std::error_code& ec)
+    tl::expected<bool, std::error_code> lexists(const fs::u8path& path)
     {
+        std::error_code ec;
         auto status = fs::symlink_status(path, ec);
+        if (ec) return tl::unexpected(ec);
         return status.type() != fs::file_type::not_found || status.type() == fs::file_type::symlink;
     }
 
-    bool lexists(const fs::u8path& path)
+    tl::expected<bool, std::error_code> exists(const fs::u8path& path)
     {
-        auto status = fs::symlink_status(path);
-        return status.type() != fs::file_type::not_found || status.type() == fs::file_type::symlink;
+        std::error_code ec;
+        auto status = fs::exists(path, ec);
+        if (ec) return tl::unexpected(ec);
+        return status;
     }
 
     std::vector<fs::u8path> filter_dir(const fs::u8path& dir, const std::string& suffix)
@@ -655,7 +659,7 @@ namespace mamba
     {
         std::error_code ec;
         std::size_t result = 0;
-        if (!lexists(path, ec))
+        if (!lexists(path).value_or(false))
         {
             return 0;
         }
@@ -686,7 +690,7 @@ namespace mamba
 
                 trash_file.replace_extension(
                     concat(trash_file.extension().string(), ".mamba_trash"));
-                while (lexists(trash_file))
+                while (lexists(trash_file).value_or(false))
                 {
                     trash_file = path;
                     trash_file.replace_extension(concat(

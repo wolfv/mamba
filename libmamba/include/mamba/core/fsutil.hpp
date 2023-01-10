@@ -52,7 +52,7 @@ namespace mamba
         {
             // TODO error handling!
             path = env::expand_user(path);
-            if (lexists(path))
+            if (lexists(path).value_or(false))
             {
                 fs::last_write_time(path, fs::now());
                 return true;

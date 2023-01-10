@@ -772,12 +772,16 @@ namespace mamba
                 // path of all the files and we should not need to follow symlink.
                 std::error_code ec;
                 auto exists = fs::exists(full_path, ec);
-                if (ec) {
-                    LOG_WARNING << "Could not check existence: " << ec.message() << " (" << p.path << ")";
+                if (ec)
+                {
+                    LOG_WARNING << "Could not check existence: " << ec.message() << " (" << p.path
+                                << ")";
                 }
                 auto is_symlink = fs::is_symlink(full_path, ec);
-                if (ec) {
-                    LOG_WARNING << "Could not check if symlink: " << ec.message() << " (" << p.path << ")";
+                if (ec)
+                {
+                    LOG_WARNING << "Could not check if symlink: " << ec.message() << " (" << p.path
+                                << ")";
                 }
                 if (!(exists || is_symlink))
                 {
